@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정수 덧셈 수직선 탐험</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+        canvas {
+            image-rendering: antialiased;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl border border-slate-200">
+        <h1 class="text-3xl font-bold text-slate-800 mb-2 text-center">🏃‍♂️ 정수 덧셈 수직선 탐험</h1>
+        <p class="text-slate-500 text-center mb-8 text-sm">숫자를 입력하고 캐릭터의 이동 경로를 관찰해 보세요!</p>
+
+        <!-- 수식 표시 영역 -->
+        <div id="formula-container" class="text-4xl font-black text-center mb-8 h-12 flex items-center justify-center gap-2 text-indigo-600">
+            <span id="formula-text">수치를 입력해 주세요</span>
+        </div>
+
+        <!-- 캔버스 영역 -->
+        <div class="relative w-full overflow-hidden mb-8 bg-slate-50 rounded-xl p-4 border border-slate-100">
+            <canvas id="mathCanvas" class="w-full h-80"></canvas>
+        </div>
+
+        <!-- 컨트롤 영역 -->
+        <div class="flex flex-wrap items-center justify-center gap-4 bg-slate-100 p-6 rounded-xl">
+            <div class="flex items-center gap-2">
+                <label class="font-bold text-slate-700">첫 번째 수:</label>
+                <input type="number" id="num1" value="3" min="-10" max="10" 
+                       class="w-20 p-2 rounded-lg border border-slate-300 text-center focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            
+            <span class="text-2xl font-bold text-slate-400">+</span>
+
+            <div class="flex items-center gap-2">
+                <label class="font-bold text-slate-700">두 번째 수:</label>
+                <input type="number" id="num2" value="-5" min="-10" max="10" 
+                       class="w-20 p-2 rounded-lg border border-slate-300 text-center focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+
+            <button onclick="startActivity()" id="runBtn"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-8 rounded-lg transition-all transform active:scale-95 shadow-md">
+                실행하기
+            </button>
+            <button onclick="resetAll()" 
+                    class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-lg transition-all">
+                초기화
+            </button>
+        </div>
+
+        <div class="mt-6 text-sm text-slate-400 text-center flex justify-center gap-4">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 rounded-full"></span> 첫 번째 이동 (위)</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 bg-red-500 rounded-full"></span> 두 번째 이동 (아래)</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mathCanvas');
+        const ctx = canvas.getContext('2d');
+        const formulaText = document.getElementById('formula-text');
+        const runBtn = document.getElementById('runBtn');
+
+        // 상태 변수
+        let currentVisualPos = 0;
+        let isAnimating = false;
+        const range = 10;
+        let paths = []; // { from, to, color, offset, side, value } 객체 저장
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = container.clientHeight * window.devicePixelRatio;
+            drawScene(currentVisualPos);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(resizeCanvas, 100);
+
+        function drawArrowHead(x, y, angle, color) {
+            const headLen = 10 * window.devicePixelRatio;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headLen * Math.cos(angle - Math.PI / 6), y - headLen * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headLen * Math.cos(angle + Math.PI / 6), y - headLen * Math.sin(angle + Math.PI / 6));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        function drawArcPath(from, to, color, heightOffset = 40, side = 'up', value = null) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = 60;
+            const centerY = h / 2;
+            const startX_line = padding;
+            const endX_line = w - padding;
+            const stepWidth = (endX_line - startX_line) / (range * 2);
+
+            const x1 = startX_line + (from + range) * stepWidth;
+            const x2 = startX_line + (to + range) * stepWidth;
+            const midX = (x1 + x2) / 2;
+            // 이동 거리가 0일 때는 높이를 작게 유지
+            const dist = Math.abs(to - from);
+            const arcHeight = dist * 5 + heightOffset; 
+
+            const yBase = side === 'up' ? centerY - 15 : centerY + 15;
+            const yControl = side === 'up' ? yBase - arcHeight : yBase + arcHeight;
+
+            // 곡선 그리기
+            ctx.beginPath();
+            ctx.moveTo(x1, yBase);
+            ctx.quadraticCurveTo(midX, yControl, x2, yBase);
+            ctx.strokeStyle = color;
+            ctx.setLineDash([5, 5]); 
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            // 화살표 위에 숫자 표시
+            if (value !== null && dist > 0) {
+                ctx.font = `bold ${16 * window.devicePixelRatio}px Noto Sans KR`;
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                const textY = side === 'up' ? yControl - 10 : yControl + 25;
+                const displayValue = value > 0 ? `+${value}` : `${value}`;
+                ctx.fillText(displayValue, midX, textY);
+            }
+
+            // 화살표 머리 각도 조정
+            let angle;
+            if (side === 'up') {
+                angle = to > from ? 0.2 : 2.9;
+            } else {
+                angle = to > from ? -0.2 : -2.9;
+            }
+            drawArrowHead(x2, yBase, angle, color);
+        }
+
+        function drawScene(charPos) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = 60;
+            const centerY = h / 2;
+            const startX = padding;
+            const endX = w - padding;
+            const stepWidth = (endX - startX) / (range * 2);
+
+            ctx.clearRect(0, 0, w, h);
+
+            // 1. 수직선 축 그리기
+            ctx.beginPath();
+            ctx.moveTo(startX - 20, centerY);
+            ctx.lineTo(endX + 20, centerY);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // 2. 눈금 및 숫자
+            ctx.font = `bold ${14 * window.devicePixelRatio}px Noto Sans KR`;
+            ctx.textAlign = 'center';
+            for (let i = -range; i <= range; i++) {
+                const x = startX + (i + range) * stepWidth;
+                ctx.beginPath();
+                ctx.moveTo(x, centerY - 8);
+                ctx.lineTo(x, centerY + 8);
+                ctx.strokeStyle = i === 0 ? '#475569' : '#cbd5e1';
+                ctx.lineWidth = i === 0 ? 3 : 1;
+                ctx.stroke();
+                ctx.fillStyle = i === 0 ? '#1e293b' : '#94a3b8';
+                ctx.fillText(i, x, centerY + 25);
+            }
+
+            // 3. 저장된 경로 그리기
+            paths.forEach(p => {
+                drawArcPath(p.from, p.to, p.color, p.offset, p.side, p.value);
+            });
+
+            // 4. 캐릭터 그리기
+            const charX = startX + (charPos + range) * stepWidth;
+            ctx.font = `${44 * window.devicePixelRatio}px Arial`;
+            ctx.fillText('🏃', charX, centerY - 25);
+        }
+
+        async function moveStepByStep(from, to, pathIdx) {
+            const direction = to > from ? 1 : -1;
+            const totalSteps = Math.abs(to - from);
+            
+            for (let i = 1; i <= totalSteps; i++) {
+                from += direction;
+                currentVisualPos = from;
+                paths[pathIdx].to = from;
+                drawScene(currentVisualPos);
+                await new Promise(r => setTimeout(r, 400));
+            }
+            return from;
+        }
+
+        async function startActivity() {
+            if (isAnimating) return;
+
+            const n1 = parseInt(document.getElementById('num1').value);
+            const n2 = parseInt(document.getElementById('num2').value);
+
+            if (isNaN(n1) || isNaN(n2)) return;
+            if (Math.abs(n1) > 10 || Math.abs(n1 + n2) > 10) {
+                alert("수직선 범위(-10~10) 내의 계산만 가능합니다.");
+                return;
+            }
+
+            isAnimating = true;
+            runBtn.disabled = true;
+            paths = []; 
+            currentVisualPos = 0;
+
+            const n2Disp = n2 < 0 ? `(${n2})` : n2;
+            formulaText.innerHTML = `${n1} + ${n2Disp} = <span class="animate-pulse">?</span>`;
+
+            // 1차 경로 추가 (수직선 위쪽)
+            paths.push({ from: 0, to: 0, color: '#3b82f6', offset: 30, side: 'up', value: n1 });
+            await new Promise(r => setTimeout(r, 500));
+            await moveStepByStep(0, n1, 0);
+
+            await new Promise(r => setTimeout(r, 800));
+
+            // 2차 경로 추가 (수직선 아래쪽)
+            paths.push({ from: n1, to: n1, color: '#ef4444', offset: 30, side: 'down', value: n2 });
+            await moveStepByStep(n1, n1 + n2, 1);
+
+            formulaText.innerHTML = `${n1} + ${n2Disp} = <span class="text-green-600 font-black scale-110 transition-transform">${n1 + n2}</span>`;
+            isAnimating = false;
+            runBtn.disabled = false;
+        }
+
+        function resetAll() {
+            if (isAnimating) return;
+            paths = [];
+            currentVisualPos = 0;
+            drawScene(0);
+            formulaText.innerText = "수치를 입력해 주세요";
+        }
+
+        window.onload = resizeCanvas;
+    </script>
+</body>
+</html>
